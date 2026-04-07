@@ -1,0 +1,112 @@
+<% content_for :title, "Weather forecast" %>
+
+<main class="min-vh-100 bg-body-secondary py-4 py-md-5">
+  <div class="container px-3" style="max-width: 48rem;">
+    <header class="text-center mb-4 mb-md-5">
+      <h1 class="h2 fw-semibold text-body-emphasis mb-2">Weather forecast</h1>
+      <p class="text-body-secondary small mb-0">
+        US ZIP (5 digits).
+      </p>
+    </header>
+
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-body p-4">
+        <%= form_with url: weather_forecasts_path, method: :get, class: "row g-3 align-items-end" do |form| %>
+          <div class="col-12 col-sm">
+            <%= form.label :zip_code, "ZIP", class: "form-label small fw-medium text-body-secondary" %>
+            <%= form.text_field :zip_code,
+                  class: "form-control form-control-lg",
+                  placeholder: "e.g. 10001",
+                  required: true,
+                  pattern: "[0-9]{5}",
+                  title: "US ZIP: 5 digits",
+                  value: params[:zip_code],
+                  inputmode: "numeric" %>
+          </div>
+          <div class="col-12 col-sm-auto">
+            <%= form.submit "Get weather", class: "btn btn-primary btn-lg w-100 w-sm-auto px-4" %>
+          </div>
+        <% end %>
+      </div>
+    </div>
+
+    <% if @weather_forecast.valid? && @weather_forecast.main.present? %>
+      <!-- TODO: move this to helper methods -->
+      <% main = @weather_forecast.main %>
+      <% temp = main["temp"] %>
+      <% tmin = main["temp_min"] %>
+      <% tmax = main["temp_max"] %>
+      <% desc = @weather_forecast.weather&.first&.dig("description") %>
+      <% wind = @weather_forecast.wind&.dig("speed") %>
+
+      <div class="card border-0 shadow-sm overflow-hidden mb-4">
+        <div class="card-header bg-primary text-white py-3 border-0 d-flex flex-wrap align-items-center justify-content-between gap-2">
+          <h2 class="h5 mb-0 fw-semibold">
+            <i class="bi bi-geo-alt-fill me-2" aria-hidden="true"></i>
+            Current conditions
+          </h2>
+          <% if @weather_forecast.read_from_cache %>
+            <span class="badge rounded-pill text-dark bg-warning-subtle border border-warning text-wrap" title="Same ZIP was requested within the last 30 minutes">
+              <i class="bi bi-database-fill me-1" aria-hidden="true"></i>
+              From cache
+            </span>
+          <% else %>
+            <span class="badge rounded-pill bg-light text-primary text-wrap">
+              <i class="bi bi-broadcast me-1" aria-hidden="true"></i>
+              Live
+            </span>
+          <% end %>
+        </div>
+        <div class="card-body p-4 p-md-5">
+          <div class="row g-4 text-center text-md-start">
+            <div class="col-md-4">
+              <div class="d-inline-flex align-items-center justify-content-center rounded-3 bg-primary-subtle text-primary p-3 mb-2">
+                <i class="bi bi-thermometer-half fs-2" aria-hidden="true"></i>
+              </div>
+              <p class="text-body-secondary small text-uppercase fw-semibold mb-1">Now</p>
+              <p class="display-6 fw-semibold text-body-emphasis mb-1">
+                <%= temp %><span class="fs-4 text-body-secondary fw-normal"><%= openweather_temp_suffix %></span>
+              </p>
+              <% if tmin.present? && tmax.present? %>
+                <p class="small text-body-secondary mb-0">
+                  <span class="text-nowrap">Low <%= tmin %><%= openweather_temp_suffix %></span>
+                  <span class="mx-1">·</span>
+                  <span class="text-nowrap">High <%= tmax %><%= openweather_temp_suffix %></span>
+                </p>
+              <% end %>
+            </div>
+            <div class="col-md-4">
+              <div class="d-inline-flex align-items-center justify-content-center rounded-3 bg-info-subtle text-info p-3 mb-2">
+                <i class="bi bi-cloud-sun fs-2" aria-hidden="true"></i>
+              </div>
+              <p class="text-body-secondary small text-uppercase fw-semibold mb-1">Conditions</p>
+              <p class="fs-4 fw-medium text-body-emphasis mb-0"><%= desc.present? ? desc.titleize : "—" %></p>
+            </div>
+            <div class="col-md-4">
+              <div class="d-inline-flex align-items-center justify-content-center rounded-3 bg-success-subtle text-success p-3 mb-2">
+                <i class="bi bi-wind fs-2" aria-hidden="true"></i>
+              </div>
+              <p class="text-body-secondary small text-uppercase fw-semibold mb-1">Wind</p>
+              <p class="fs-4 fw-medium text-body-emphasis mb-0">
+                <%= wind.present? ? "#{wind} #{openweather_wind_suffix}" : "—" %>
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    <% elsif !@weather_forecast.valid? %>
+      <div class="alert alert-danger border-0 shadow-sm d-flex align-items-start gap-2" role="alert">
+        <i class="bi bi-exclamation-triangle-fill flex-shrink-0 mt-1" aria-hidden="true"></i>
+        <div>
+          <p class="fw-semibold mb-1">Something went wrong</p>
+          <p class="small mb-0"><%= safe_join(@weather_forecast.errors, tag.br) %></p>
+        </div>
+      </div>
+    <% elsif params[:zip_code].blank? %>
+      <p class="text-center text-body-secondary small mb-0">
+        <i class="bi bi-arrow-up-circle me-1" aria-hidden="true"></i>
+        Submit a code above to load the forecast.
+      </p>
+    <% end %>
+  </div>
+</main>

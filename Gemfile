@@ -43,6 +43,7 @@ gem "thruster", require: false
 gem 'httparty'
 gem 'pry'
 gem 'pry-nav'
+gem "cssbundling-rails", "~> 1.4"
 
 group :development, :test do
   # See https://guides.rubyonrails.org/debugging_rails_applications.html#debugging-with-the-debug-gem
