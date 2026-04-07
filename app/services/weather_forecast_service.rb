@@ -1,4 +1,4 @@
-# Service to fetch weather data from OpenWeatherMap API based on zip code
+# Service to fetch weather data from OpenWeatherMap API based on zip / postal code.
 class WeatherForecastService
   include ActiveModel::Validations
 
@@ -6,6 +6,7 @@ class WeatherForecastService
   INVALID_WEATHER_RESPONSE    = Data.define(:valid?, :errors)
   BASE_URL                    = ENV.fetch("OPENWEATHERMAP_BASE_URL")
   API_KEY                     = ENV.fetch("OPENWEATHERMAP_API_KEY")
+  UNITS                       = ENV.fetch("OPENWEATHERMAP_UNITS", "imperial")
   HTTP_ERROR_STATUS_THRESHOLD = 300
 
   validates :zip_code,
@@ -24,13 +25,13 @@ class WeatherForecastService
   end
 
   def call
-    return success_response(nil) if zip_code.blank?
+    return empty_success if zip_code.blank?
     return error_response(errors.full_messages) unless valid?
 
-    response = HTTParty.get(endpoint)
-
+    response = HTTParty.get(current_weather_url)
     return failure_response(response) if response.code >= HTTP_ERROR_STATUS_THRESHOLD
-    success_response(response)
+
+    build_success(response)
   rescue => e
     Rails.logger.error("Error fetching weather data: #{e.message}")
     error_response([e.message])
@@ -40,23 +41,39 @@ class WeatherForecastService
 
   attr_reader :zip_code
 
-  def endpoint
-    query = URI.encode_www_form(zip: zip_code, appid: API_KEY)
-    URI.join(BASE_URL, "/data/2.5/weather?#{query}")
+  def empty_success
+    VALID_WEATHER_RESPONSE.new(valid?: true, main: nil, weather: nil, wind: nil)
   end
 
-  def success_response(response)
+  def query_params
+    URI.encode_www_form(zip: zip_code, units: UNITS, appid: API_KEY)
+  end
+
+  def current_weather_url
+    URI.join(BASE_URL, "/data/2.5/weather?#{query_params}")
+  end
+
+  def build_success(response)
+    current_json = parsed_body(response)
+
     VALID_WEATHER_RESPONSE.new(valid?: true,
-                               main: response&.dig("main"),
-                               weather: response&.dig("weather"),
-                               wind: response&.dig("wind"))
+                               main: current_json["main"],
+                               weather: current_json["weather"],
+                               wind: current_json["wind"])
+  end
+
+  def parsed_body(response)
+    JSON.parse(response.body)
+  rescue JSON::ParserError
+    {}
+  end
+
+  def failure_response(response)
+    message = parsed_body(response)["message"].presence || "Weather data unavailable"
+    INVALID_WEATHER_RESPONSE.new(valid?: false, errors: [message])
   end
 
   def error_response(errors)
     INVALID_WEATHER_RESPONSE.new(valid?: false, errors: errors)
-  end
-
-  def failure_response(response)
-    INVALID_WEATHER_RESPONSE.new(valid?: false, errors: [response.dig("message")])
   end
 end

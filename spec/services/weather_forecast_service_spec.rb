@@ -5,18 +5,19 @@ RSpec.describe WeatherForecastService do
     let(:us_zip) { "10001" }
 
     context "when the zip code is valid but the API returns an error payload" do
-      let(:parsed_error) { { "message" => "city not found" } }
-      let(:http_response) { double("http_response", code: 404) }
+      let(:http_response) { double("http_response", code: 404, body: { "message" => "city not found" }.to_json) }
 
-      before do
-        allow(http_response).to receive(:dig) { |*keys| parsed_error.dig(*keys) }
-        allow(HTTParty).to receive(:get).and_return(http_response)
-      end
+      before { allow(HTTParty).to receive(:get).and_return(http_response) }
 
       it "returns an unsuccessful response with the API message" do
         response = described_class.call(zip_code: us_zip)
         expect(response.valid?).to be(false)
         expect(response.errors).to eq(["city not found"])
+      end
+
+      it "calls the weather API once" do
+        described_class.call(zip_code: us_zip)
+        expect(HTTParty).to have_received(:get).once
       end
     end
 
@@ -47,13 +48,9 @@ RSpec.describe WeatherForecastService do
     end
 
     context "when the API returns a non-200 status code" do
-      let(:parsed_error) { { "message" => "Bad Request" } }
-      let(:http_response) { double("http_response", code: 400) }
+      let(:http_response) { double("http_response", code: 400, body: { "message" => "Bad Request" }.to_json) }
 
-      before do
-        allow(http_response).to receive(:dig) { |*keys| parsed_error.dig(*keys) }
-        allow(HTTParty).to receive(:get).and_return(http_response)
-      end
+      before { allow(HTTParty).to receive(:get).and_return(http_response) }
 
       it "returns an unsuccessful response" do
         response = described_class.call(zip_code: us_zip)
@@ -62,24 +59,24 @@ RSpec.describe WeatherForecastService do
       end
     end
 
-    context "when the API returns a 200 status code" do
-      let(:response_body) do
-        { main: { temp: 70 }, weather: [{ description: "Sunny" }], wind: { speed: 5 } }.to_json
+    context "when the API returns 200" do
+      let(:parsed) do
+        {
+          "main" => { "temp" => 70, "temp_min" => 65, "temp_max" => 75 },
+          "weather" => [{ "description" => "Sunny" }],
+          "wind" => { "speed" => 10 }
+        }
       end
-      let(:parsed) { JSON.parse(response_body) }
-      let(:http_response) { double("http_response", code: 200) }
+      let(:http_response) { double("http_response", code: 200, body: parsed.to_json) }
 
-      before do
-        allow(http_response).to receive(:dig) { |*keys| parsed.dig(*keys) }
-        allow(HTTParty).to receive(:get).and_return(http_response)
-      end
+      before { allow(HTTParty).to receive(:get).and_return(http_response) }
 
       it "maps main, weather, and wind from the payload" do
         response = described_class.call(zip_code: us_zip)
         expect(response.valid?).to be(true)
-        expect(response.main).to eq({ "temp" => 70 })
+        expect(response.main).to eq({ "temp" => 70, "temp_min" => 65, "temp_max" => 75 })
         expect(response.weather).to eq([{ "description" => "Sunny" }])
-        expect(response.wind).to eq({ "speed" => 5 })
+        expect(response.wind).to eq({ "speed" => 10 })
       end
     end
 
@@ -92,6 +89,22 @@ RSpec.describe WeatherForecastService do
         response = described_class.call(zip_code: us_zip)
         expect(response.valid?).to be(false)
         expect(response.errors).to eq(["API Error"])
+      end
+    end
+
+    context "with an 8-digit postal code" do
+      let(:parsed) do
+        { "main" => { "temp" => 25 }, "weather" => [{ "description" => "clouds" }], "wind" => { "speed" => 3 } }
+      end
+      let(:http_response) { double("http_response", code: 200, body: parsed.to_json) }
+
+      before { allow(HTTParty).to receive(:get).and_return(http_response) }
+
+      it "requests current weather using the postal code in the zip query param" do
+        described_class.call(zip_code: "01310100")
+        expect(HTTParty).to have_received(:get).once.with(
+          satisfy { |uri| uri.to_s.include?("/data/2.5/weather") && uri.to_s.include?("zip=01310100") }
+        )
       end
     end
   end
